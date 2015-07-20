@@ -107,6 +107,12 @@ var foodConfig = {
     fillColor: '#f1c40f'
 };
 
+var virusConfig = {
+    border: 0,
+    borderColor: '#32cd32',
+    fillColor: '#32cd32'
+};
+
 var playerConfig = {
     border: 6,
     textColor: '#FFFFFF',
@@ -133,6 +139,7 @@ var player = {
 };
 
 var foods = [];
+var viruses = [];
 var enemies = [];
 var leaderboard = [];
 var target = {x: player.x, y: player.y};
@@ -406,7 +413,7 @@ function setupSocket(socket) {
     });
 
     // Handle movement
-    socket.on('serverTellPlayerMove', function (playerData, userData, foodsList) {
+    socket.on('serverTellPlayerMove', function (playerData, userData, foodsList, virusesList) {
         var xoffset = player.x - playerData.x;
         var yoffset = player.y - playerData.y;
 
@@ -419,6 +426,7 @@ function setupSocket(socket) {
 
         enemies = userData;
         foods = foodsList;
+		viruses = virusesList;
     });
 
     // Die
@@ -468,6 +476,13 @@ function drawFood(food) {
     graph.fillStyle = food.color.fill || foodConfig.fillColor;
     graph.lineWidth = foodConfig.border;
     drawCircle(food.x - player.x + screenWidth / 2, food.y - player.y + screenHeight / 2, food.radius, 9);
+}
+
+function drawVirus(virus) {
+    graph.strokeStyle = virus.color.border || virusConfig.borderColor;
+    graph.fillStyle = virus.color.fill || virusConfig.fillColor;
+    graph.lineWidth = virusConfig.border;
+    drawCircle(virus.x - player.x + screenWidth / 2, virus.y - player.y + screenHeight / 2, virus.radius, 9);
 }
 
 function drawPlayer() {
@@ -738,6 +753,10 @@ function gameLoop() {
                 drawFood(food);
             });
 
+			viruses.forEach(function(virus) {
+				drawVirus(virus);
+			});
+			
             if (borderDraw) {
                 drawborder();
             }

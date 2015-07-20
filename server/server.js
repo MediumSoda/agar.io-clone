@@ -15,6 +15,7 @@ var util = require('./lib/util');
 
 var users = [];
 var food = [];
+var virus = [];
 var sockets = {};
 
 var leaderboard = [];
@@ -39,7 +40,26 @@ function addFood(toAdd) {
             y: position.y,
             radius: radius,
             mass: Math.random() + 2,
-            color: util.randomColor()
+            color: util.randomColor(),
+            type: 'food'
+        });
+    }
+}
+
+function addVirus(toAdd) {
+    var radius = util.massToRadius(c.virusMass);
+    while (toAdd--) {
+        var position = c.virusUniformDisposition ? util.uniformPosition(virus, radius) : util.randomPosition(radius);
+
+        virus.push({
+            // make ids unique
+            id: ((new Date()).getTime() + '' + virus.length) >>> 0,
+            x: position.x,
+            y: position.y,
+            radius: radius,
+            mass: Math.random() + 30,
+            color: { fill: '#32cd32', border: '#32cd32' },
+            type: 'virus'
         });
     }
 }
@@ -47,6 +67,12 @@ function addFood(toAdd) {
 function removeFood(toRem) {
     while (toRem--) {
         food.pop();
+    }
+}
+
+function removeVirus(toRem) {
+    while (toRem--) {
+        virus.pop();
     }
 }
 
@@ -89,26 +115,42 @@ function movePlayer(player) {
 }
 
 function balanceMass() {
-    var totalMass = food.length * c.foodMass +
+    var totalMass = (food.length * c.foodMass) + (virus.length * c.virusMass) +
         users
             .map(function(u) {return u.mass; })
             .reduce(function(pu,cu) { return pu+cu;}, 0);
-
     var massDiff = c.gameMass - totalMass;
+
     var maxFoodDiff = c.maxFood - food.length;
     var foodDiff = parseInt(massDiff / c.foodMass) - maxFoodDiff;
     var foodToAdd = Math.min(foodDiff, maxFoodDiff);
     var foodToRemove = -Math.max(foodDiff, maxFoodDiff);
 
+    var maxVirusDiff = c.maxVirus - virus.length;
+    var virusDiff = parseInt(massDiff / c.virusMass) - maxVirusDiff;
+    var virusToAdd = Math.min(virusDiff, maxVirusDiff);
+    var virusToRemove = -Math.max(virusDiff, maxVirusDiff);
+
     if (foodToAdd > 0) {
         console.log('adding ' + foodToAdd + ' food to level');
         addFood(foodToAdd);
-        console.log('mass rebalanced');
+        console.log('food rebalanced');
     }
     else if (foodToRemove > 0) {
         console.log('removing ' + foodToRemove + ' food from level');
         removeFood(foodToRemove);
-        console.log('mass rebalanced');
+        console.log('food rebalanced');
+    }
+
+    if (virusToAdd > 0) {
+        console.log('adding ' + virusToAdd + ' virus to level');
+        addVirus(virusToAdd);
+        console.log('virus rebalanced');
+    }
+    else if (foodToRemove > 0) {
+        console.log('removing ' + virusToRemove + ' virus from level');
+        removeVirus(virusToRemove);
+        console.log('virus rebalanced');
     }
 }
 
@@ -278,15 +320,27 @@ function tickPlayer(currentPlayer) {
 
     var foodEaten = food
         .map( function(f) { return SAT.pointInCircle(new V(f.x, f.y), playerCircle); })
-        .reduce( function(a, b, c) { return b ? a.concat(c) : a; }, []);
+        .reduce(function (a, b, c) { return b ? a.concat(c) : a; }, []);
 
-    foodEaten.forEach( function(f) {
+    var virusEaten = virus
+        .map(function (f) { return SAT.pointInCircle(new V(f.x, f.y), playerCircle); })
+        .reduce(function (a, b, c) { return b ? a.concat(c) : a; }, []);
+
+    foodEaten.forEach(function (f) {
         food[f] = {};
         food.splice(f, 1);
+        currentPlayer.mass += foodEaten.length * c.foodMass;
     });
 
+    if (currentPlayer.mass > 10) {
+        virusEaten.forEach(function (f) {
+            virus[f] = {};
+            virus.splice(f, 1);
+            currentPlayer.mass -= 5;
+        });
+    }
+
     currentPlayer.speed = 6.25;
-    currentPlayer.mass += foodEaten.length * c.foodMass;
     currentPlayer.radius = util.massToRadius(currentPlayer.mass);
     playerCircle.r = currentPlayer.radius;
 
@@ -383,7 +437,7 @@ function gameloop() {
 function sendUpdates() {
     users.forEach( function(u) {
         var visibleFood  = food
-            .map(function(f) {
+            .map(function (f) {
                 if ( f.x > u.x - u.screenWidth/2 - 20 &&
                     f.x < u.x + u.screenWidth/2 + 20 &&
                     f.y > u.y - u.screenHeight/2 - 20 &&
@@ -391,7 +445,18 @@ function sendUpdates() {
                     return f;
                 }
             })
-            .filter(function(f) { return f; });
+            .filter(function (f) { return f; });
+
+        var visibleVirus = virus
+            .map(function (f) {
+                if (f.x > u.x - u.screenWidth / 2 - 20 &&
+                    f.x < u.x + u.screenWidth / 2 + 20 &&
+                    f.y > u.y - u.screenHeight / 2 - 20 &&
+                    f.y < u.y + u.screenHeight / 2 + 20) {
+                    return f;
+                }
+            })
+            .filter(function (f) { return f; })
 
         var visibleEnemies  = users
             .map(function(f) {
@@ -418,7 +483,7 @@ function sendUpdates() {
             y: u.y,
             radius: Math.round(u.radius),
             mass: Math.round(u.mass)
-        }, visibleEnemies, visibleFood);
+        }, visibleEnemies, visibleFood, visibleVirus);
         if (leaderboardChanged) {
             sockets[u.id].emit('leaderboard', {
                 players: users.length,
